@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Instagram Auto Publisher{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Dashboard</h1>
+    
+    <!-- Stats Overview -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="card h-100 bg-primary bg-opacity-10 border-primary">
+                <div class="card-body text-center p-4">
+                    <h6 class="text-muted mb-3">Total de Publicaciones</h6>
+                    <div class="dashboard-number">{{ total_posts }}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card h-100 bg-success bg-opacity-10 border-success">
+                <div class="card-body text-center p-4">
+                    <h6 class="text-muted mb-3">Publicaciones Exitosas</h6>
+                    <div class="dashboard-number text-success">{{ success_posts }}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card h-100 bg-danger bg-opacity-10 border-danger">
+                <div class="card-body text-center p-4">
+                    <h6 class="text-muted mb-3">Errores</h6>
+                    <div class="dashboard-number text-danger">{{ error_posts }}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card h-100 bg-info bg-opacity-10 border-info">
+                <div class="card-body text-center p-4">
+                    <h6 class="text-muted mb-3">Publicaciones este mes</h6>
+                    <div class="dashboard-number text-info">{{ monthly_posts }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Accounts Overview -->
+    <h2 class="mb-3">Cuentas Configuradas ({{ accounts|length }}/4)</h2>
+    <p class="text-muted mb-3">El sistema está configurado para administrar exactamente 4 cuentas de Instagram{% if accounts|length < 4 %}, puedes crear {{ 4 - accounts|length }} más{% endif %}.</p>
+    
+    <div class="row g-4 mb-5">
+        {% for account in accounts %}
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 account-card">
+                <div class="card-body">
+                    <h4 class="card-title">{{ account.name }}</h4>
+                    <h6 class="card-subtitle mb-2 text-muted">@{{ account.instagram_username }}</h6>
+                    
+                    <div class="d-flex mt-3">
+                        <a href="{{ url_for('edit_account', account_id=account.id) }}" class="btn btn-sm btn-outline-primary me-2">
+                            <i class="bi bi-pencil"></i> Editar
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-success me-2 run-script" data-account-id="{{ account.id }}">
+                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                            <span class="button-text"><i class="bi bi-play-fill"></i> Ejecutar</span>
+                        </button>
+                        <a href="{{ url_for('history', account_id=account.id) }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-clock-history"></i> Historial
+                        </a>
+                    </div>
+                    
+                    <div id="result-{{ account.id }}" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Recent Publications -->
+    <div class="row mb-5">
+        <div class="col-md-8">
+            <h2 class="mb-3">Publicaciones Recientes</h2>
+            
+            {% if recent_publications %}
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        {% for pub in recent_publications %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">
+                                        {% if pub.status == 'success' %}
+                                        <i class="bi bi-check-circle-fill text-success"></i>
+                                        {% elif pub.status == 'error' %}
+                                        <i class="bi bi-x-circle-fill text-danger"></i>
+                                        {% else %}
+                                        <i class="bi bi-info-circle-fill text-info"></i>
+                                        {% endif %}
+                                        
+                                        {{ pub.account.name }}
+                                        {% if pub.image_name %}
+                                        - {{ pub.image_name }}
+                                        {% endif %}
+                                    </h6>
+                                    <small class="text-muted">{{ pub.timestamp.strftime('%d/%m/%Y %H:%M') }}</small>
+                                </div>
+                                <span class="badge {% if pub.status == 'success' %}bg-success{% elif pub.status == 'error' %}bg-danger{% else %}bg-info{% endif %}">
+                                    {{ pub.status }}
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="{{ url_for('history') }}" class="btn btn-sm btn-outline-primary">Ver todo el historial</a>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <p>No hay publicaciones recientes para mostrar.</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="col-md-4">
+            <h2 class="mb-3">Próximas Publicaciones</h2>
+            
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Horarios programados</h5>
+                    
+                    {% set has_schedules = false %}
+                    {% for account in accounts %}
+                        {% if account.morning_post or account.afternoon_post or account.evening_post %}
+                            {% set has_schedules = true %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if has_schedules %}
+                    <ul class="list-group list-group-flush">
+                        {% for account in accounts %}
+                            {% if account.morning_post %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="bi bi-sunrise text-warning"></i>
+                                    {{ account.name }}
+                                </div>
+                                <span class="badge bg-primary">{{ account.morning_time }}</span>
+                            </li>
+                            {% endif %}
+                            
+                            {% if account.afternoon_post %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="bi bi-sun text-warning"></i>
+                                    {{ account.name }}
+                                </div>
+                                <span class="badge bg-primary">{{ account.afternoon_time }}</span>
+                            </li>
+                            {% endif %}
+                            
+                            {% if account.evening_post %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="bi bi-moon text-info"></i>
+                                    {{ account.name }}
+                                </div>
+                                <span class="badge bg-primary">{{ account.evening_time }}</span>
+                            </li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="card-text text-muted">No hay horarios programados.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

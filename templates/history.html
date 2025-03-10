@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block title %}Historial de Publicaciones - Instagram Auto Publisher{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Historial de Publicaciones</h1>
+        
+        <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="accountFilterDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                {% if account %}
+                {{ account.name }}
+                {% else %}
+                Todas las cuentas
+                {% endif %}
+            </button>
+            <ul class="dropdown-menu" aria-labelledby="accountFilterDropdown">
+                <li><a class="dropdown-item" href="{{ url_for('history') }}">Todas</a></li>
+                <li><hr class="dropdown-divider"></li>
+                {% for acc in accounts %}
+                <li><a class="dropdown-item" href="{{ url_for('history', account_id=acc.id) }}">{{ acc.name }}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    
+    {% if publications %}
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="timeline">
+                        {% for pub in publications %}
+                        <div class="timeline-item {{ pub.status }}">
+                            <div class="card mb-3 history-item {{ pub.status }}">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h5 class="card-title mb-1">
+                                                {% if pub.status == 'success' %}
+                                                <i class="bi bi-check-circle-fill text-success"></i>
+                                                {% elif pub.status == 'error' %}
+                                                <i class="bi bi-x-circle-fill text-danger"></i>
+                                                {% else %}
+                                                <i class="bi bi-info-circle-fill text-info"></i>
+                                                {% endif %}
+                                                
+                                                {% if pub.image_name %}
+                                                {{ pub.image_name }}
+                                                {% else %}
+                                                Publicación #{{ pub.id }}
+                                                {% endif %}
+                                            </h5>
+                                            <h6 class="card-subtitle text-muted mb-2">
+                                                {{ pub.timestamp.strftime('%d/%m/%Y %H:%M:%S') }}
+                                                {% if accounts|length > 1 and account is none %}
+                                                - {{ pub.account.name }}
+                                                {% endif %}
+                                            </h6>
+                                        </div>
+                                        <span class="badge {% if pub.status == 'success' %}bg-success{% elif pub.status == 'error' %}bg-danger{% else %}bg-info{% endif %}">
+                                            {{ pub.status }}
+                                        </span>
+                                    </div>
+                                    
+                                    <p class="card-text">
+                                        {% if pub.details %}
+                                        {{ pub.details }}
+                                        {% else %}
+                                        <em>No hay detalles disponibles</em>
+                                        {% endif %}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <h5>No hay publicaciones en el historial</h5>
+        <p>Aún no se han realizado publicaciones{% if account %} para esta cuenta{% endif %}.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

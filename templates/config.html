@@ -1,0 +1,293 @@
+{% extends 'base.html' %}
+
+{% block title %}Configuración - Instagram Auto Publisher{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1>Configuración de Cuentas</h1>
+            <p class="text-muted">El sistema está configurado para administrar exactamente 4 cuentas de Instagram ({{ account_count }}/4 configuradas)</p>
+        </div>
+        {% if can_add_more %}
+        <a href="{{ url_for('new_account') }}" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Nueva Cuenta
+        </a>
+        {% else %}
+        <button class="btn btn-secondary" disabled title="Has alcanzado el límite de 4 cuentas">
+            <i class="bi bi-plus-lg"></i> Nueva Cuenta
+        </button>
+        {% endif %}
+    </div>
+    
+    {% if form %}
+    <!-- Account Form -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary bg-opacity-25">
+            {% if edit_mode %}
+            <h4>Editar Cuenta: {{ account.name }}</h4>
+            {% else %}
+            <h4>Nueva Cuenta</h4>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {{ form.hidden_tag() }}
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            {{ form.name.label(class="form-label") }}
+                            {{ form.name(class="form-control") }}
+                            {% if form.name.errors %}
+                            <div class="text-danger small">
+                                {% for error in form.name.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.instagram_username.label(class="form-label") }}
+                            {{ form.instagram_username(class="form-control") }}
+                            {% if form.instagram_username.errors %}
+                            <div class="text-danger small">
+                                {% for error in form.instagram_username.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3 password-container">
+                            {{ form.instagram_password.label(class="form-label") }}
+                            {{ form.instagram_password(class="form-control", type="password", id="instagram_password") }}
+                            <button type="button" class="toggle-password" data-target="instagram_password">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            {% if form.instagram_password.errors %}
+                            <div class="text-danger small">
+                                {% for error in form.instagram_password.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            {{ form.folder_id.label(class="form-label") }}
+                            <div class="input-group">
+                                {{ form.folder_id(class="form-control") }}
+                                <span class="input-group-text" data-bs-toggle="tooltip" title="ID de la carpeta de Google Drive donde se encuentran las imágenes">
+                                    <i class="bi bi-question-circle"></i>
+                                </span>
+                            </div>
+                            {% if form.folder_id.errors %}
+                            <div class="text-danger small">
+                                {% for error in form.folder_id.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.gemini_api_key.label(class="form-label") }}
+                            <div class="input-group">
+                                {{ form.gemini_api_key(class="form-control", type="password", id="gemini_api_key") }}
+                                <button type="button" class="toggle-password input-group-text" data-target="gemini_api_key">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                            {% if form.gemini_api_key.errors %}
+                            <div class="text-danger small">
+                                {% for error in form.gemini_api_key.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.google_credentials.label(class="form-label") }}
+                            <div class="input-group">
+                                {{ form.google_credentials(class="form-control", rows="3") }}
+                                <span class="input-group-text" data-bs-toggle="tooltip" title="JSON de credenciales de Google codificado en Base64">
+                                    <i class="bi bi-question-circle"></i>
+                                </span>
+                            </div>
+                            {% if form.google_credentials.errors %}
+                            <div class="text-danger small">
+                                {% for error in form.google_credentials.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.gemini_prompt.label(class="form-label") }}
+                            <div class="input-group">
+                                {{ form.gemini_prompt(class="form-control", rows="5") }}
+                                <span class="input-group-text" data-bs-toggle="tooltip" title="Prompt personalizado para generar descripciones de imágenes con Gemini AI">
+                                    <i class="bi bi-question-circle"></i>
+                                </span>
+                            </div>
+                            {% if form.gemini_prompt.errors %}
+                            <div class="text-danger small">
+                                {% for error in form.gemini_prompt.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            <div class="form-text small text-muted">
+                                Personaliza el prompt para generar descripciones que se adapten al estilo de esta cuenta.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h5 class="mt-4 mb-3">Programación de publicaciones</h5>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h6 class="card-title">Mañana</h6>
+                                <div class="mb-2 form-check">
+                                    {{ form.morning_post(class="form-check-input schedule-toggle", data_target="morning_time") }}
+                                    {{ form.morning_post.label(class="form-check-label") }}
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">Hora</label>
+                                    {{ form.morning_time(class="form-control", id="morning_time") }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h6 class="card-title">Tarde</h6>
+                                <div class="mb-2 form-check">
+                                    {{ form.afternoon_post(class="form-check-input schedule-toggle", data_target="afternoon_time") }}
+                                    {{ form.afternoon_post.label(class="form-check-label") }}
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">Hora</label>
+                                    {{ form.afternoon_time(class="form-control", id="afternoon_time") }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h6 class="card-title">Noche</h6>
+                                <div class="mb-2 form-check">
+                                    {{ form.evening_post(class="form-check-input schedule-toggle", data_target="evening_time") }}
+                                    {{ form.evening_post.label(class="form-check-label") }}
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">Hora</label>
+                                    {{ form.evening_time(class="form-control", id="evening_time") }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="d-flex mt-4">
+                    {{ form.submit(class="btn btn-primary me-2") }}
+                    {% if edit_mode %}
+                    <a href="{{ url_for('config') }}" class="btn btn-secondary">Cancelar</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+    {% else %}
+    
+    <!-- Account List -->
+    {% if accounts %}
+    <div class="row g-4">
+        {% for account in accounts %}
+        <div class="col-md-6">
+            <div class="card h-100 account-card">
+                <div class="card-body">
+                    <h4 class="card-title">{{ account.name }}</h4>
+                    <h6 class="card-subtitle mb-3 text-muted">@{{ account.instagram_username }}</h6>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p class="mb-1"><strong>ID de Carpeta:</strong></p>
+                            <p class="text-muted small">{{ account.folder_id }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-1"><strong>Última actualización:</strong></p>
+                            <p class="text-muted small">{{ account.updated_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <p class="mb-1"><strong>Prompt personalizado:</strong></p>
+                            <p class="text-muted small">
+                                {% if account.gemini_prompt and account.gemini_prompt|length > 100 %}
+                                {{ account.gemini_prompt[:100] }}...
+                                {% elif account.gemini_prompt %}
+                                {{ account.gemini_prompt }}
+                                {% else %}
+                                <em>Usando prompt predeterminado</em>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <h6 class="mb-2">Programación:</h6>
+                    <div class="d-flex flex-wrap mb-3">
+                        {% if account.morning_post %}
+                        <span class="badge bg-info me-2 mb-1">Mañana: {{ account.morning_time }}</span>
+                        {% endif %}
+                        {% if account.afternoon_post %}
+                        <span class="badge bg-info me-2 mb-1">Tarde: {{ account.afternoon_time }}</span>
+                        {% endif %}
+                        {% if account.evening_post %}
+                        <span class="badge bg-info me-2 mb-1">Noche: {{ account.evening_time }}</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="d-flex mt-3">
+                        <a href="{{ url_for('edit_account', account_id=account.id) }}" class="btn btn-sm btn-outline-primary me-2">
+                            <i class="bi bi-pencil"></i> Editar
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-success me-2 run-script" data-account-id="{{ account.id }}">
+                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                            <span class="button-text"><i class="bi bi-play-fill"></i> Ejecutar</span>
+                        </button>
+                        <form action="{{ url_for('delete_account', account_id=account.id) }}" method="post" class="d-inline">
+                            <button type="submit" class="btn btn-sm btn-outline-danger delete-account">
+                                <i class="bi bi-trash"></i> Eliminar
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div id="result-{{ account.id }}" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <h5>No hay cuentas configuradas</h5>
+        <p>Agrega una nueva cuenta para comenzar a usar el servicio.</p>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

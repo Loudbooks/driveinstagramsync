@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+{% block title %}Inicio - Instagram Auto Publisher{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-dark border-info">
+                <div class="card-body text-center p-5">
+                    <h1 class="display-4 mb-4">Instagram Auto Publisher</h1>
+                    <p class="lead">
+                        Servicio automatizado para publicar fotos desde Google Drive a múltiples cuentas de Instagram con descripciones generadas por IA.
+                    </p>
+                    {% if current_user.is_authenticated %}
+                    <div class="mt-4">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg">
+                            <i class="bi bi-speedometer2"></i> Ir al Dashboard
+                        </a>
+                    </div>
+                    {% else %}
+                    <div class="mt-4">
+                        <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg">
+                            <i class="bi bi-person"></i> Iniciar Sesión
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-5">
+        <div class="col-md-4">
+            <div class="card h-100 icon-card">
+                <div class="card-body text-center p-4">
+                    <div class="mb-3">
+                        <i class="bi bi-cloud-arrow-up text-info" style="font-size: 3rem;"></i>
+                    </div>
+                    <h3>Google Drive</h3>
+                    <p>Carga tus fotos en Google Drive y déjanos hacer el resto. Organizamos todo automáticamente.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card h-100 icon-card">
+                <div class="card-body text-center p-4">
+                    <div class="mb-3">
+                        <i class="bi bi-robot text-info" style="font-size: 3rem;"></i>
+                    </div>
+                    <h3>IA Generativa</h3>
+                    <p>Generación automática de descripciones para tus posts utilizando inteligencia artificial avanzada.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card h-100 icon-card">
+                <div class="card-body text-center p-4">
+                    <div class="mb-3">
+                        <i class="bi bi-instagram text-info" style="font-size: 3rem;"></i>
+                    </div>
+                    <h3>Múltiples Cuentas</h3>
+                    <p>Administra varias cuentas de Instagram desde una única plataforma con horarios personalizados.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if account_stats %}
+    <h2 class="mb-4">Cuentas Configuradas ({{ account_stats|length }}/4)</h2>
+    <p class="text-muted mb-4">El sistema está configurado para administrar exactamente 4 cuentas de Instagram.</p>
+    <div class="row g-4">
+        {% for account in account_stats %}
+        <div class="col-md-4">
+            <div class="card h-100 account-card">
+                <div class="card-body">
+                    <h5 class="card-title">{{ account.name }}</h5>
+                    <h6 class="card-subtitle mb-2 text-muted">@{{ account.instagram_username }}</h6>
+                    
+                    <div class="d-flex justify-content-between my-3">
+                        <div class="text-center">
+                            <div class="fs-4 fw-bold text-success">{{ account.success_count }}</div>
+                            <div class="small text-muted">Exitosas</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="fs-4 fw-bold text-danger">{{ account.error_count }}</div>
+                            <div class="small text-muted">Errores</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="fs-4 fw-bold">{{ account.total_count }}</div>
+                            <div class="small text-muted">Total</div>
+                        </div>
+                    </div>
+                    
+                    {% if account.latest %}
+                    <p class="card-text">
+                        <small class="text-muted">
+                            Última publicación: {{ account.latest.strftime('%d/%m/%Y %H:%M') }}
+                        </small>
+                    </p>
+                    {% else %}
+                    <p class="card-text">
+                        <small class="text-muted">
+                            No hay publicaciones recientes
+                        </small>
+                    </p>
+                    {% endif %}
+                    
+                    {% if current_user.is_authenticated %}
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-primary run-script" data-account-id="{{ account.id }}">
+                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                            <span class="button-text">Ejecutar ahora</span>
+                        </button>
+                        <a href="{{ url_for('history', account_id=account.id) }}" class="btn btn-sm btn-outline-secondary">
+                            Historial
+                        </a>
+                    </div>
+                    
+                    <div id="result-{{ account.id }}" class="mt-3"></div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

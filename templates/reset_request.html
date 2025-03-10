@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block title %}Solicitar Restablecimiento de Contraseña - Instagram Auto Publisher{% endblock %}
+
+{% block content %}
+<div class="container login-container">
+    <div class="card border-primary">
+        <div class="card-header bg-primary bg-opacity-25 text-center">
+            <h4>Solicitar Restablecimiento de Contraseña</h4>
+        </div>
+        <div class="card-body p-4">
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> Ingresa tu dirección de correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
+            </div>
+            
+            <form method="post">
+                {{ form.hidden_tag() }}
+                
+                <div class="mb-3">
+                    {{ form.email.label(class="form-label") }}
+                    {{ form.email(class="form-control", placeholder="Ingresa tu correo electrónico") }}
+                    {% if form.email.errors %}
+                    <div class="text-danger small">
+                        {% for error in form.email.errors %}
+                        {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="d-grid gap-2">
+                    {{ form.submit(class="btn btn-primary") }}
+                </div>
+                
+                <div class="mt-3 text-center">
+                    <small>
+                        <a href="{{ url_for('login') }}">Volver a Iniciar Sesión</a>
+                    </small>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

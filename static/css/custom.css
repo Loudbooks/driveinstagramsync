@@ -1,0 +1,141 @@
+/* Custom styles to complement Bootstrap */
+
+.icon-card {
+    transition: all 0.3s ease;
+}
+
+.icon-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+.login-container {
+    max-width: 400px;
+    margin: 40px auto;
+}
+
+.password-container {
+    position: relative;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+.account-card {
+    border-left: 4px solid var(--bs-info);
+    transition: all 0.2s ease-in-out;
+}
+
+.account-card:hover {
+    border-left-color: var(--bs-primary);
+}
+
+.schedule-time-group {
+    display: flex;
+    align-items: center;
+}
+
+.schedule-time-group .form-check {
+    margin-right: 10px;
+}
+
+.history-item {
+    border-left: 3px solid var(--bs-secondary);
+    transition: all 0.2s ease;
+}
+
+.history-item.success {
+    border-left-color: var(--bs-success);
+}
+
+.history-item.error {
+    border-left-color: var(--bs-danger);
+}
+
+.history-item.info {
+    border-left-color: var(--bs-info);
+}
+
+.history-item:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dashboard-number {
+    font-size: 2.5rem;
+    font-weight: bold;
+}
+
+.account-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+}
+
+/* Animation for loading state */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+/* Logo styling */
+.app-logo {
+    width: 32px;
+    height: 32px;
+    margin-right: 8px;
+}
+
+/* Custom timeline for history */
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 2px;
+    background-color: var(--bs-secondary);
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 1.5rem;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -35px;
+    top: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--bs-secondary);
+}
+
+.timeline-item.success::before {
+    background-color: var(--bs-success);
+}
+
+.timeline-item.error::before {
+    background-color: var(--bs-danger);
+}
+
+.timeline-item.info::before {
+    background-color: var(--bs-info);
+}
