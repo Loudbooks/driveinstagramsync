@@ -144,8 +144,8 @@ def post_to_instagram(image_path, caption, username, password):
         
         # *** DESHABILITADO PARA PRUEBAS ***
         # Simular éxito sin publicar realmente en Instagram
-        logging.info(f"[SIMULADO] Publicación con imagen: {image_path}")
-        logging.info(f"[SIMULADO] Caption: {caption[:100]}...")
+        logging.info(f"Publicación con imagen: {image_path}")
+        logging.info(f"Caption: {caption[:100]}...")
 
         # Si la sesión es válida, guardarla para futuros usos
         if login_success:
@@ -153,14 +153,14 @@ def post_to_instagram(image_path, caption, username, password):
             logging.info(f"Sesión guardada para {username}")
 
         # Devolver éxito simulado para pruebas
-        return True, f"[PRUEBAS] Simulación de publicación exitosa"
+        #return True, f"[PRUEBAS] Simulación de publicación exitosa"
         
         # Para implementación real (comentado):
-        # if login_success:
-        #     media = cl.photo_upload(image_path, caption)
-        #     return True, f"Posted successfully with media ID: {media.id}"
-        # else:
-        #     return False, "No se pudo autenticar con Instagram. La cuenta puede requerir verificación manual."
+        if login_success:
+             media = cl.photo_upload(image_path, caption)
+             return True, f"Posted successfully with media ID: {media.id}"
+        else:
+             return False, "No se pudo autenticar con Instagram. La cuenta puede requerir verificación manual."
         
     except Exception as e:
         error_msg = str(e)
