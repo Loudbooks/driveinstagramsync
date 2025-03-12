@@ -21,4 +21,5 @@ dependencies = [
     "google-generativeai>=0.8.4",
     "sqlalchemy>=2.0.38",
     "wtforms>=3.2.1",
+    "google-auth>=2.38.0",
 ]

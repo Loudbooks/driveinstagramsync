@@ -126,13 +126,35 @@ def dashboard():
         (db.extract('year', PublicationHistory.timestamp) == current_year)
     ).count()
 
+    # Verificar estado del planificador
+    has_schedules = False
+    scheduled_tasks = []
+    for account in accounts:
+        if account.morning_post and account.morning_time:
+            has_schedules = True
+            scheduled_tasks.append(f"Cuenta {account.name}: Mañana a las {account.morning_time}")
+        if account.afternoon_post and account.afternoon_time:
+            has_schedules = True
+            scheduled_tasks.append(f"Cuenta {account.name}: Tarde a las {account.afternoon_time}")
+        if account.evening_post and account.evening_time:
+            has_schedules = True
+            scheduled_tasks.append(f"Cuenta {account.name}: Noche a las {account.evening_time}")
+
+    scheduler_status = "activo" if has_schedules else "sin tareas programadas"
+    logging.info(f"Estado del planificador: {scheduler_status}")
+    if has_schedules:
+        logging.info(f"Tareas programadas ({len(scheduled_tasks)}):")
+        for task in scheduled_tasks:
+            logging.info(f"  - {task}")
+
     return render_template('dashboard.html', 
                            accounts=accounts,
                            total_posts=total_posts,
                            success_posts=success_posts,
                            error_posts=error_posts,
                            recent_publications=recent_publications,
-                           monthly_posts=monthly_posts)
+                           monthly_posts=monthly_posts,
+                           scheduler_status=scheduler_status)
 
 @app.route('/config', methods=['GET', 'POST'])
 @login_required
@@ -173,6 +195,10 @@ def new_account():
         db.session.add(account)
         db.session.commit()
 
+        # Recargar el planificador para incluir la nueva cuenta
+        logging.info("Recargando el planificador para incluir la nueva cuenta")
+        initialize_tasks()
+
         # Mostrar un mensaje especial cuando se alcance el límite
         new_count = Account.query.count()
         if new_count >= 4:
@@ -191,6 +217,7 @@ def edit_account(account_id):
     form = AccountForm(obj=account)
 
     if form.validate_on_submit():
+        # Actualizar la cuenta existente
         account.name = form.name.data
         account.instagram_username = form.instagram_username.data
         account.instagram_password = form.instagram_password.data
@@ -198,11 +225,7 @@ def edit_account(account_id):
         account.gemini_api_key = form.gemini_api_key.data
         account.gemini_prompt = form.gemini_prompt.data
 
-        # Handle Google credentials (don't overwrite if not provided)
-        if form.google_credentials.data and form.google_credentials.data.strip():
-            account.google_credentials = form.google_credentials.data
-
-        # Update schedule settings
+        # Actualizar configuración de horarios
         account.morning_post = form.morning_post.data
         account.morning_time = form.morning_time.data
         account.afternoon_post = form.afternoon_post.data
@@ -210,9 +233,13 @@ def edit_account(account_id):
         account.evening_post = form.evening_post.data
         account.evening_time = form.evening_time.data
 
-        account.updated_at = datetime.utcnow()
         db.session.commit()
-        flash('Cuenta actualizada correctamente', 'success')
+
+        # Recargar el planificador para aplicar los cambios inmediatamente
+        logging.info("Recargando el planificador para aplicar los cambios de horario")
+        initialize_tasks()
+
+        flash('Cuenta actualizada correctamente y planificador recargado', 'success')
         return redirect(url_for('config'))
 
     return render_template('config.html', form=form, edit_mode=True, account=account)
@@ -354,13 +381,16 @@ def run_publication_for_account(account_id):
             if os.path.exists(temp_creds_path):
                 os.remove(temp_creds_path)
 
-def schedule_tasks():
-    """Schedule publication tasks for all accounts"""
+def initialize_tasks():
+    """Initialize and schedule publication tasks for all accounts"""
     with app.app_context():
         accounts = Account.query.all()
 
         # Clear existing jobs
         schedule.clear()
+
+        # Log all schedules for debugging
+        log_schedules = []
 
         for account in accounts:
             # Morning post
@@ -368,29 +398,67 @@ def schedule_tasks():
                 schedule.every().day.at(account.morning_time).do(
                     run_publication_for_account, account_id=account.id
                 ).tag(f"account_{account.id}")
+                log_schedules.append(f"Cuenta {account.name}: Mañana a las {account.morning_time}")
 
             # Afternoon post
             if account.afternoon_post and account.afternoon_time:
                 schedule.every().day.at(account.afternoon_time).do(
                     run_publication_for_account, account_id=account.id
                 ).tag(f"account_{account.id}")
+                log_schedules.append(f"Cuenta {account.name}: Tarde a las {account.afternoon_time}")
 
             # Evening post
             if account.evening_post and account.evening_time:
                 schedule.every().day.at(account.evening_time).do(
                     run_publication_for_account, account_id=account.id
                 ).tag(f"account_{account.id}")
+                log_schedules.append(f"Cuenta {account.name}: Noche a las {account.evening_time}")
 
-        logging.info(f"Scheduled tasks for {len(accounts)} accounts")
+        if log_schedules:
+            logging.info(f"Tareas programadas ({len(log_schedules)}):")
+            for schedule_log in log_schedules:
+                logging.info(f"  - {schedule_log}")
+        else:
+            logging.warning("No se encontraron horarios para programar publicaciones")
 
-        # Run the scheduler loop
-        while True:
+def schedule_tasks():
+    """Schedule task execution in an infinite loop"""
+    # Run the scheduler loop
+    while True:
+        try:
             with app.app_context():
+                pending_jobs = schedule.get_jobs()
+                now = datetime.now()
+                current_time = now.strftime("%H:%M")
+
+                if pending_jobs:
+                    logging.debug(f"Comprobando {len(pending_jobs)} tareas programadas a las {current_time}")
+
+                    # Log more detailed information about each job
+                    for job in pending_jobs:
+                        next_run = job.next_run
+                        time_diff = (next_run - now).total_seconds() if next_run else None
+                        should_run = time_diff is not None and time_diff <= 0
+
+                        if should_run:
+                            logging.info(f"Ejecutando tarea: {job.tags}")
+
+                        # Log detailed info about all jobs every 15 minutes
+                        if now.minute % 15 == 0:
+                            logging.debug(f"Tarea: {job.tags}, Próxima ejecución: {next_run}, Debe ejecutarse ahora: {should_run}")
+
                 schedule.run_pending()
             time.sleep(60)  # Check every minute
+        except Exception as e:
+            logging.error(f"Error en el planificador: {str(e)}")
+            time.sleep(60)  # Continuar a pesar de errores
 
 def start_scheduler():
     """Start the scheduler in a separate thread"""
+    # Primero inicializar las tareas
+    initialize_tasks()
+    
+    # Luego iniciar el bucle del planificador en un hilo separado
     scheduler_thread = threading.Thread(target=schedule_tasks, daemon=True)
     scheduler_thread.start()
     logging.info("Scheduler started in background thread")

@@ -132,14 +132,14 @@
                 <div class="card-body">
                     <h5 class="card-title">Horarios programados</h5>
                     
-                    {% set has_schedules = false %}
+                    {% set has_schedules = namespace(value=false) %}
                     {% for account in accounts %}
                         {% if account.morning_post or account.afternoon_post or account.evening_post %}
-                            {% set has_schedules = true %}
+                            {% set has_schedules.value = true %}
                         {% endif %}
                     {% endfor %}
                     
-                    {% if has_schedules %}
+                    {% if has_schedules.value %}
                     <ul class="list-group list-group-flush">
                         {% for account in accounts %}
                             {% if account.morning_post %}
