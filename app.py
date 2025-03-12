@@ -50,16 +50,16 @@ def load_user(user_id):
 def index():
     accounts = Account.query.all()
     account_stats = []
-    
+
     for account in accounts:
         # Get success and error counts for each account
         success_count = PublicationHistory.query.filter_by(account_id=account.id, status='success').count()
         error_count = PublicationHistory.query.filter_by(account_id=account.id, status='error').count()
         total_count = success_count + error_count
-        
+
         # Get latest publication
         latest = PublicationHistory.query.filter_by(account_id=account.id).order_by(PublicationHistory.timestamp.desc()).first()
-        
+
         account_stats.append({
             'id': account.id,
             'name': account.name,
@@ -69,7 +69,7 @@ def index():
             'total_count': total_count,
             'latest': latest.timestamp if latest else None
         })
-    
+
     return render_template('index.html', account_stats=account_stats)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -85,7 +85,7 @@ def login():
             flash('Cuenta de administrador creada correctamente. Ahora puedes iniciar sesión.', 'success')
             return redirect(url_for('login'))
         return render_template('login.html', form=form, first_time=True)
-    
+
     # Normal login flow
     form = LoginForm()
     if form.validate_on_submit():
@@ -108,15 +108,15 @@ def logout():
 @login_required
 def dashboard():
     accounts = Account.query.all()
-    
+
     # Get total statistics
     total_posts = PublicationHistory.query.count()
     success_posts = PublicationHistory.query.filter_by(status='success').count()
     error_posts = PublicationHistory.query.filter_by(status='error').count()
-    
+
     # Get recent publications
     recent_publications = PublicationHistory.query.order_by(PublicationHistory.timestamp.desc()).limit(5).all()
-    
+
     # Get monthly stats
     # This is simplified, could be improved with SQLAlchemy func
     current_month = datetime.now().month
@@ -125,7 +125,7 @@ def dashboard():
         (db.extract('month', PublicationHistory.timestamp) == current_month) & 
         (db.extract('year', PublicationHistory.timestamp) == current_year)
     ).count()
-    
+
     return render_template('dashboard.html', 
                            accounts=accounts,
                            total_posts=total_posts,
@@ -150,9 +150,9 @@ def new_account():
     if account_count >= 4:
         flash('El sistema está limitado a un máximo de 4 cuentas de Instagram.', 'warning')
         return redirect(url_for('config'))
-        
+
     form = AccountForm()
-    
+
     if form.validate_on_submit():
         account = Account(
             name=form.name.data,
@@ -169,19 +169,19 @@ def new_account():
             evening_post=form.evening_post.data,
             evening_time=form.evening_time.data
         )
-        
+
         db.session.add(account)
         db.session.commit()
-        
+
         # Mostrar un mensaje especial cuando se alcance el límite
         new_count = Account.query.count()
         if new_count >= 4:
             flash('Cuenta creada correctamente. Has alcanzado el límite de 4 cuentas.', 'info')
         else:
             flash(f'Cuenta creada correctamente. Puedes crear {4 - new_count} cuentas más.', 'success')
-            
+
         return redirect(url_for('config'))
-    
+
     return render_template('config.html', form=form, edit_mode=False)
 
 @app.route('/account/edit/<int:account_id>', methods=['GET', 'POST'])
@@ -189,7 +189,7 @@ def new_account():
 def edit_account(account_id):
     account = Account.query.get_or_404(account_id)
     form = AccountForm(obj=account)
-    
+
     if form.validate_on_submit():
         account.name = form.name.data
         account.instagram_username = form.instagram_username.data
@@ -197,11 +197,11 @@ def edit_account(account_id):
         account.folder_id = form.folder_id.data
         account.gemini_api_key = form.gemini_api_key.data
         account.gemini_prompt = form.gemini_prompt.data
-        
+
         # Handle Google credentials (don't overwrite if not provided)
         if form.google_credentials.data and form.google_credentials.data.strip():
             account.google_credentials = form.google_credentials.data
-            
+
         # Update schedule settings
         account.morning_post = form.morning_post.data
         account.morning_time = form.morning_time.data
@@ -209,26 +209,26 @@ def edit_account(account_id):
         account.afternoon_time = form.afternoon_time.data
         account.evening_post = form.evening_post.data
         account.evening_time = form.evening_time.data
-        
+
         account.updated_at = datetime.utcnow()
         db.session.commit()
         flash('Cuenta actualizada correctamente', 'success')
         return redirect(url_for('config'))
-    
+
     return render_template('config.html', form=form, edit_mode=True, account=account)
 
 @app.route('/account/delete/<int:account_id>', methods=['POST'])
 @login_required
 def delete_account(account_id):
     account = Account.query.get_or_404(account_id)
-    
+
     # Delete related publication history
     PublicationHistory.query.filter_by(account_id=account.id).delete()
-    
+
     # Delete account
     db.session.delete(account)
     db.session.commit()
-    
+
     flash('Cuenta eliminada correctamente', 'success')
     return redirect(url_for('config'))
 
@@ -236,50 +236,61 @@ def delete_account(account_id):
 @login_required
 def run_script(account_id):
     account = Account.query.get_or_404(account_id)
-    
+
     try:
         logging.info(f"Ejecutando script para la cuenta: {account.name}")
-        
+
         # Clean up and validate Google credentials
         google_creds = account.google_credentials.strip()
         padding = 4 - (len(google_creds) % 4) if len(google_creds) % 4 else 0
         google_creds += "=" * padding
-        
+
         # Create temporary credentials file
         temp_creds_path = os.path.join(os.getcwd(), f"temp_credentials_{account.id}.json")
         logging.info(f"Creando archivo temporal de credenciales en: {temp_creds_path}")
-        
+
         try:
             # Decode and write Google credentials
             decoded_creds = base64.b64decode(google_creds)
-            
+
             with open(temp_creds_path, "wb") as f:
                 f.write(decoded_creds)
-                
+
             # Run the script with account info
-            result = instagram_publisher.publish_for_account(
-                account_id=account.id,
-                instagram_username=account.instagram_username,
-                instagram_password=account.instagram_password,
-                folder_id=account.folder_id,
-                gemini_api_key=account.gemini_api_key,
-                credentials_path=temp_creds_path
-            )
-            
+            try:
+                result = instagram_publisher.publish_for_account(
+                    account_id=account.id,
+                    instagram_username=account.instagram_username,
+                    instagram_password=account.instagram_password,
+                    folder_id=account.folder_id,
+                    gemini_api_key=account.gemini_api_key,
+                    credentials_path=temp_creds_path
+                )
+            except Exception as e:
+                # Si hay un error pero la publicación ya pudo completarse
+                if "token '<'" in str(e) or "is not valid JSON" in str(e):
+                    # Este es un error de timeout o respuesta no JSON después de la publicación
+                    logging.warning(f"Se completó la publicación pero hubo un error posterior: {str(e)}")
+                    result = {'status': 'partial_success', 'message': 'Imagen publicada en Instagram, pero hubo un error al finalizar el proceso. El archivo en Google Drive podría no haberse renombrado.'}
+                else:
+                    # Otro tipo de error
+                    logging.error(f"Error durante la publicación: {str(e)}")
+                    result = {'status': 'error', 'message': str(e)}
+
             logging.info(f"Resultado del script: {result}")
-            
+
             return jsonify({
                 'status': result.get('status', 'error'),
                 'message': 'Script ejecutado correctamente' if result.get('status') == 'success' else result.get('message', 'Error desconocido'),
                 'results': result.get('results', [])
             })
-            
+
         finally:
             # Clean up temporary file
             if os.path.exists(temp_creds_path):
                 os.remove(temp_creds_path)
                 logging.info("Archivo temporal de credenciales eliminado")
-                
+
     except Exception as e:
         logging.error(f"Error al ejecutar el script: {str(e)}", exc_info=True)
         return jsonify({'status': 'error', 'message': str(e)})
@@ -288,7 +299,7 @@ def run_script(account_id):
 @login_required
 def history():
     account_id = request.args.get('account_id', type=int)
-    
+
     if account_id:
         account = Account.query.get_or_404(account_id)
         publications = PublicationHistory.query.filter_by(account_id=account_id).order_by(PublicationHistory.timestamp.desc()).all()
@@ -305,24 +316,24 @@ def run_publication_for_account(account_id):
         if not account:
             logging.error(f"Account with ID {account_id} not found")
             return
-        
+
         logging.info(f"Running scheduled publication for account: {account.name}")
-        
+
         try:
             # Clean up and validate Google credentials
             google_creds = account.google_credentials.strip()
             padding = 4 - (len(google_creds) % 4) if len(google_creds) % 4 else 0
             google_creds += "=" * padding
-            
+
             # Create temporary credentials file
             temp_creds_path = os.path.join(os.getcwd(), f"temp_credentials_{account.id}.json")
-            
+
             # Decode and write Google credentials
             decoded_creds = base64.b64decode(google_creds)
-            
+
             with open(temp_creds_path, "wb") as f:
                 f.write(decoded_creds)
-                
+
             # Run the script with account info
             result = instagram_publisher.publish_for_account(
                 account_id=account.id,
@@ -332,12 +343,12 @@ def run_publication_for_account(account_id):
                 gemini_api_key=account.gemini_api_key,
                 credentials_path=temp_creds_path
             )
-            
+
             logging.info(f"Scheduled publication result: {result}")
-            
+
         except Exception as e:
             logging.error(f"Error during scheduled publication: {str(e)}", exc_info=True)
-            
+
         finally:
             # Clean up temporary file
             if os.path.exists(temp_creds_path):
@@ -347,31 +358,31 @@ def schedule_tasks():
     """Schedule publication tasks for all accounts"""
     with app.app_context():
         accounts = Account.query.all()
-        
+
         # Clear existing jobs
         schedule.clear()
-        
+
         for account in accounts:
             # Morning post
             if account.morning_post and account.morning_time:
                 schedule.every().day.at(account.morning_time).do(
                     run_publication_for_account, account_id=account.id
                 ).tag(f"account_{account.id}")
-                
+
             # Afternoon post
             if account.afternoon_post and account.afternoon_time:
                 schedule.every().day.at(account.afternoon_time).do(
                     run_publication_for_account, account_id=account.id
                 ).tag(f"account_{account.id}")
-                
+
             # Evening post
             if account.evening_post and account.evening_time:
                 schedule.every().day.at(account.evening_time).do(
                     run_publication_for_account, account_id=account.id
                 ).tag(f"account_{account.id}")
-        
+
         logging.info(f"Scheduled tasks for {len(accounts)} accounts")
-        
+
         # Run the scheduler loop
         while True:
             with app.app_context():
@@ -390,7 +401,7 @@ def reset_request():
     # Si el usuario ya está autenticado, redirigir al dashboard
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
-        
+
     form = RequestResetForm()
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
@@ -401,7 +412,7 @@ def reset_request():
             return redirect(url_for('login'))
         else:
             flash('No se encontró ninguna cuenta con ese correo electrónico.', 'warning')
-    
+
     return render_template('reset_request.html', form=form)
 
 @app.route('/reset_password/<string:token>/<int:user_id>', methods=['GET', 'POST'])
@@ -409,13 +420,13 @@ def reset_password(token, user_id):
     # Si el usuario ya está autenticado, redirigir al dashboard
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
-        
+
     user = User.query.get_or_404(user_id)
-    
+
     if not user.verify_reset_token(token):
         flash('El token es inválido o ha expirado.', 'warning')
         return redirect(url_for('reset_request'))
-        
+
     form = ResetPasswordForm()
     if form.validate_on_submit():
         user.set_password(form.password.data)
@@ -423,7 +434,7 @@ def reset_password(token, user_id):
         db.session.commit()
         flash('Tu contraseña ha sido actualizada. Ahora puedes iniciar sesión.', 'success')
         return redirect(url_for('login'))
-        
+
     return render_template('reset_password.html', form=form)
 
 # Initialize the database and handle migrations
@@ -433,11 +444,11 @@ with app.app_context():
         inspector = db.inspect(db.engine)
         columns = [col['name'] for col in inspector.get_columns('account')] if inspector.has_table('account') else []
         needs_gemini_prompt = 'gemini_prompt' not in columns and inspector.has_table('account')
-        
+
         # Crear tablas base
         db.create_all()
         logging.info("Base de datos inicializada correctamente")
-        
+
         # Migración manual para añadir columna gemini_prompt si es necesario
         if needs_gemini_prompt:
             try:
@@ -448,11 +459,11 @@ with app.app_context():
                         "'Describe la imagen que te envío con un texto continuo ideal para un pie de foto en Instagram. Identifica la especie del ave y proporciona detalles sobre su aspecto, hábitat y distribución, manteniendo un tono natural, atractivo y animado. Incluye emojis y hashtags adecuados para resaltar la belleza de la naturaleza y la fotografía de aves. Con enfoque en la fotografía. Responde únicamente con el texto solicitado, sin añadir introducciones ni comentarios adicionales.'"
                     ))
                     conn.commit()
-                
+
                 logging.info("Migración completada: columna gemini_prompt añadida correctamente")
             except Exception as migration_error:
                 logging.error(f"Error en migración: {str(migration_error)}")
-                
+
     except Exception as e:
         logging.error(f"Error al inicializar la base de datos: {str(e)}")
 

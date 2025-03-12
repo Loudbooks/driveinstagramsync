@@ -1,57 +1,50 @@
-import os
-import base64
 import logging
-from instagrapi import Client
-from googleapiclient.discovery import build
+import os
 from googleapiclient.http import MediaIoBaseDownload
 import google.generativeai as genai
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+from instagrapi import Client
 from models import PublicationHistory, Account
-from app import db, app
+from app import db, app #Modified line to include app
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 def authenticate_google_drive(credentials_path):
-    """Authenticate with Google Drive API using provided credentials"""
-    logging.info("Authenticating with Google Drive")
-
+    """Authenticate with Google Drive API"""
     try:
-        credentials = ServiceAccountCredentials.from_json_keyfile_name(
-            credentials_path,
+        credentials = service_account.Credentials.from_service_account_file(
+            credentials_path, 
             scopes=['https://www.googleapis.com/auth/drive']
         )
-        
         service = build('drive', 'v3', credentials=credentials)
-        
-        # Verificar que el servicio funciona correctamente
-        about = service.about().get(fields="user").execute()
-        logging.info(f"Autenticación exitosa con Google Drive. Usuario: {about.get('user', {}).get('emailAddress', 'desconocido')}")
-        
         return service
     except Exception as e:
-        logging.error(f"Error en la autenticación con Google Drive: {str(e)}")
-        raise
+        logging.error(f"Error authenticating with Google Drive: {str(e)}")
+        raise e
 
 def get_new_images(service, folder_id):
-    """Get list of new images from the specified Google Drive folder"""
+    """Get new images from Google Drive folder.
+    
     # Incluir todos los tipos de imágenes comunes
+    """
     query = f"'{folder_id}' in parents and (mimeType contains 'image/')"
-    
+
     logging.info(f"Buscando imágenes en carpeta: {folder_id}")
-    
+
     try:
         results = service.files().list(q=query, fields="files(id, name, mimeType)").execute()
         all_images = results.get('files', [])
-        
+
         logging.info(f"Total de archivos en la carpeta: {len(all_images)}")
-        
+
         for img in all_images:
             logging.info(f"Archivo encontrado: {img['name']} - Tipo: {img.get('mimeType', 'desconocido')}")
-        
+
         # Filtrar solo las imágenes que no han sido procesadas
         new_images = [img for img in all_images if "_enviada" not in img['name']]
-        
+
         logging.info(f"Imágenes sin procesar encontradas: {len(new_images)}")
-        
+
         return new_images
     except Exception as e:
         logging.error(f"Error al buscar imágenes: {str(e)}")
@@ -71,7 +64,7 @@ def download_image(service, file_id, file_name):
     return file_path
 
 def get_gemini_image_description(image_path, api_key, custom_prompt=None):
-    """Generate image description using Google's Gemini AI"""
+    """Generate image description using Gemini AI"""
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-1.5-flash")
 
@@ -79,7 +72,8 @@ def get_gemini_image_description(image_path, api_key, custom_prompt=None):
         image_data = image_file.read()
 
     # Usar prompt personalizado si está disponible, sino usar uno predeterminado
-    prompt = custom_prompt if custom_prompt else "Describe la imagen que te envío con un texto continuo ideal para un pie de foto en Instagram. Identifica la especie del ave y proporciona detalles sobre su aspecto, hábitat y distribución, manteniendo un tono natural, atractivo y animado. Incluye emojis y hashtags adecuados para resaltar la belleza de la naturaleza y la fotografía de aves. Con enfoque en la fotografía. Responde únicamente con el texto solicitado, sin añadir introducciones ni comentarios adicionales."
+    default_prompt = "Describe la imagen que te envío con un texto continuo ideal para un pie de foto en Instagram. Identifica la especie del ave y proporciona detalles sobre su aspecto, hábitat y distribución, manteniendo un tono natural, atractivo y animado. Incluye emojis y hashtags adecuados para resaltar la belleza de la naturaleza y la fotografía de aves. Con enfoque en la fotografía. Responde únicamente con el texto solicitado, sin añadir introducciones ni comentarios adicionales."
+    prompt = custom_prompt if custom_prompt else default_prompt
 
     try:
         response = model.generate_content(
@@ -95,8 +89,14 @@ def get_gemini_image_description(image_path, api_key, custom_prompt=None):
 
 def rename_file(service, file_id, new_name):
     """Rename a file in Google Drive to mark as processed"""
-    file_metadata = {'name': new_name}
-    service.files().update(fileId=file_id, body=file_metadata).execute()
+    try:
+        file_metadata = {'name': new_name}
+        service.files().update(fileId=file_id, body=file_metadata).execute()
+        logging.info(f"Archivo renombrado exitosamente a {new_name}")
+    except Exception as e:
+        logging.error(f"Error al renombrar archivo: {str(e)}")
+        # Continuar con la ejecución aunque falle el renombrado
+        # La imagen ya se publicó en Instagram, así que esto es secundario
 
 def post_to_instagram(image_path, caption, username, password):
     """Post an image to Instagram using instagrapi with session persistence"""
@@ -109,7 +109,7 @@ def post_to_instagram(image_path, caption, username, password):
         session_file = f"{sessions_dir}/{username}_session.json"
 
         cl = Client()
-        
+
         # Configurar un manejador de código de desafío que no requiera entrada interactiva
         cl.challenge_code_handler = lambda _, __: "000000"  # Código falso, solo para evitar bloqueo
 
@@ -124,13 +124,13 @@ def post_to_instagram(image_path, caption, username, password):
 
         login_success = False
         login_message = "No se pudo iniciar sesión"
-        
+
         # Intentar cargar sesión existente
         if os.path.exists(session_file):
             try:
                 cl.load_settings(session_file)
                 logging.info(f"Sesión cargada para {username}")
-                
+
                 # Verificar sesión sin hacer login completo
                 try:
                     cl.get_timeline_feed()  # Una operación simple para verificar si la sesión es válida
@@ -138,47 +138,73 @@ def post_to_instagram(image_path, caption, username, password):
                     logging.info(f"Sesión válida para {username}")
                 except Exception as ve:
                     logging.warning(f"Sesión inválida para {username}: {str(ve)}")
-                    # No intentamos login completo automáticamente
+                    logging.info(f"Intentando login completo para {username}")
+                    try:
+                        cl.login(username, password)
+                        login_success = True
+                        logging.info(f"Login exitoso para {username}")
+                        # Guardar sesión para futuro uso
+                        cl.dump_settings(session_file)
+                        logging.info(f"Sesión guardada para {username}")
+                    except Exception as le:
+                        logging.error(f"Error en login para {username}: {str(le)}")
+                        login_message = f"Error en login: {str(le)}"
             except Exception as se:
                 logging.warning(f"Error cargando sesión para {username}: {str(se)}")
-        
-        # *** DESHABILITADO PARA PRUEBAS ***
-        # Simular éxito sin publicar realmente en Instagram
-        logging.info(f"Publicación con imagen: {image_path}")
-        logging.info(f"Caption: {caption[:100]}...")
-
-        # Si la sesión es válida, guardarla para futuros usos
-        if login_success:
-            cl.dump_settings(session_file)
-            logging.info(f"Sesión guardada para {username}")
-
-        # Devolver éxito simulado para pruebas
-        #return True, f"[PRUEBAS] Simulación de publicación exitosa"
-        
-        # Para implementación real (comentado):
-        if login_success:
-             media = cl.photo_upload(image_path, caption)
-             return True, f"Posted successfully with media ID: {media.id}"
+                # Intentar login completo si la sesión no cargó
+                try:
+                    logging.info(f"Intentando login para {username} después de error de sesión")
+                    cl.login(username, password)
+                    login_success = True
+                    logging.info(f"Login exitoso para {username}")
+                    # Guardar sesión para futuro uso
+                    cl.dump_settings(session_file)
+                    logging.info(f"Sesión guardada para {username}")
+                except Exception as le:
+                    logging.error(f"Error en login para {username}: {str(le)}")
+                    login_message = f"Error en login: {str(le)}"
         else:
-             return False, "No se pudo autenticar con Instagram. La cuenta puede requerir verificación manual."
-        
+            # No hay sesión guardada, intentar login directo
+            try:
+                logging.info(f"No hay sesión guardada, intentando login para {username}")
+                cl.login(username, password)
+                login_success = True
+                logging.info(f"Login exitoso para {username}")
+                # Guardar sesión para futuro uso
+                cl.dump_settings(session_file)
+                logging.info(f"Sesión guardada para {username}")
+            except Exception as le:
+                logging.error(f"Error en login para {username}: {str(le)}")
+                login_message = f"Error en login: {str(le)}"
+
+        # Publicación real en Instagram
+        if login_success:
+            try:
+                media = cl.photo_upload(image_path, caption)
+                return True, f"Publicado con éxito. ID de media: {media.id}"
+            except Exception as e:
+                logging.error(f"Error al publicar la foto: {str(e)}")
+                return False, f"Error al publicar la foto: {str(e)}"
+        else:
+            return False, f"No se pudo autenticar con Instagram. {login_message}"
+
     except Exception as e:
         error_msg = str(e)
         logging.error(f"Instagram posting error: {error_msg}")
-        
+
         if "challenge_required" in error_msg or "Unexpected token '<'" in error_msg:
             return False, "La cuenta de Instagram requiere verificación manual. Por favor inicie sesión en Instagram desde un navegador y complete los desafíos de seguridad."
-        
+
         return False, f"Error posting to Instagram: {error_msg}"
 
 def publish_for_account(account_id, instagram_username, instagram_password, folder_id, gemini_api_key, credentials_path):
-    """Main function to publish images for a specific account"""
+    """Main function to publish images for a specific account."""
     results = []
 
     try:
         logging.info(f"Starting publication process for account {instagram_username}")
         logging.info(f"ID de carpeta configurado: {folder_id}")
-        
+
         if not folder_id or folder_id.strip() == "":
             message = "Error: No se ha configurado un ID de carpeta válido"
             logging.error(message)
@@ -186,7 +212,7 @@ def publish_for_account(account_id, instagram_username, instagram_password, fold
 
         # Obtener el prompt personalizado de la cuenta si existe
         custom_prompt = None
-        with app.app_context():
+        with app.app_context(): #Using app context here
             account = Account.query.get(account_id)
             if account and account.gemini_prompt:
                 custom_prompt = account.gemini_prompt
