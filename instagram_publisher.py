@@ -8,6 +8,7 @@ from models import PublicationHistory, Account
 from app import db, app #Modified line to include app
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+import json
 
 def authenticate_google_drive(credentials_path):
     """Authenticate with Google Drive API"""
@@ -99,93 +100,76 @@ def rename_file(service, file_id, new_name):
         # La imagen ya se publicó en Instagram, así que esto es secundario
 
 def post_to_instagram(image_path, caption, username, password):
-    """Post an image to Instagram using instagrapi with session persistence"""
+    """Publica una imagen en Instagram usando instagrapi con persistencia de sesión"""
     try:
-        # Directorio para guardar las sesiones
         sessions_dir = './instagram_sessions'
         os.makedirs(sessions_dir, exist_ok=True)
 
-        # Archivo de sesión único para cada cuenta
         session_file = f"{sessions_dir}/{username}_session.json"
-
         cl = Client()
-
-        # Configurar un manejador de código de desafío que no requiera entrada interactiva
-        cl.challenge_code_handler = lambda _, __: "000000"  # Código falso, solo para evitar bloqueo
-
-        # Deshabilitar verificación cuando hay problemas con la cuenta
-        cl.set_settings({
-            "client_settings": {
-                "auto_patch": True,
-                "challenge_resolve": False,  # Deshabilitar resolución de desafíos
-                "experimental": True
-            }
+        # Configurar manualmente el "device"
+        cl.set_device({
+            "app_version": "123.0.0.21.114",
+            "android_version": 29,
+            "android_release": "10",
+            "dpi": "420dpi",
+            "resolution": "1080x1920",
+            "manufacturer": "Xiaomi",
+            "model": "Mi 9T",
+            "device": "davinci"
         })
-
         login_success = False
         login_message = "No se pudo iniciar sesión"
 
-        # Intentar cargar sesión existente
-        if os.path.exists(session_file):
+        def try_login():
+            nonlocal login_success, login_message
             try:
-                cl.load_settings(session_file)
-                logging.info(f"Sesión cargada para {username}")
-
-                # Verificar sesión sin hacer login completo
-                try:
-                    cl.get_timeline_feed()  # Una operación simple para verificar si la sesión es válida
-                    login_success = True
-                    logging.info(f"Sesión válida para {username}")
-                except Exception as ve:
-                    logging.warning(f"Sesión inválida para {username}: {str(ve)}")
-                    logging.info(f"Intentando login completo para {username}")
-                    try:
-                        cl.login(username, password)
-                        login_success = True
-                        logging.info(f"Login exitoso para {username}")
-                        # Guardar sesión para futuro uso
-                        cl.dump_settings(session_file)
-                        logging.info(f"Sesión guardada para {username}")
-                    except Exception as le:
-                        logging.error(f"Error en login para {username}: {str(le)}")
-                        login_message = f"Error en login: {str(le)}"
-            except Exception as se:
-                logging.warning(f"Error cargando sesión para {username}: {str(se)}")
-                # Intentar login completo si la sesión no cargó
-                try:
-                    logging.info(f"Intentando login para {username} después de error de sesión")
-                    cl.login(username, password)
-                    login_success = True
-                    logging.info(f"Login exitoso para {username}")
-                    # Guardar sesión para futuro uso
-                    cl.dump_settings(session_file)
-                    logging.info(f"Sesión guardada para {username}")
-                except Exception as le:
-                    logging.error(f"Error en login para {username}: {str(le)}")
-                    login_message = f"Error en login: {str(le)}"
-        else:
-            # No hay sesión guardada, intentar login directo
-            try:
-                logging.info(f"No hay sesión guardada, intentando login para {username}")
                 cl.login(username, password)
                 login_success = True
                 logging.info(f"Login exitoso para {username}")
-                # Guardar sesión para futuro uso
                 cl.dump_settings(session_file)
-                logging.info(f"Sesión guardada para {username}")
+                # Persistencia extendida (si fuera necesario para el cliente)
+                with open(session_file, 'r+') as f:
+                    settings = json.load(f)
+                    f.seek(0)
+                    json.dump(settings, f)
+                    f.truncate()
             except Exception as le:
                 logging.error(f"Error en login para {username}: {str(le)}")
                 login_message = f"Error en login: {str(le)}"
 
-        # Publicación real en Instagram
+        # Intentar cargar configuración y sesión
+        if os.path.exists(session_file):
+            try:
+                cl.load_settings(session_file)
+                logging.info(f"Sesión cargada para {username}")
+                cl.get_timeline_feed()  # Verifica si la sesión aún es válida
+                login_success = True
+                logging.info(f"Sesión válida para {username}")
+            except Exception as ve:
+                logging.warning(f"Sesión inválida, intentando login completo: {str(ve)}")
+                try_login()
+        else:
+            try_login()
+
         if login_success:
             try:
                 media = cl.photo_upload(image_path, caption)
                 return True, f"Publicado con éxito. ID de media: {media.id}"
             except Exception as e:
-                logging.error(f"Error al publicar la foto: {str(e)}")
+                logging.error(f"Primer intento fallido: {str(e)}")
+                if "login_required" in str(e):
+                    logging.warning("Sesión inválida al publicar, intentando nuevo login y reintento...")
+                    try_login()
+                    if login_success:
+                        try:
+                            media = cl.photo_upload(image_path, caption)
+                            return True, f"Publicado tras reintento. ID de media: {media.id}"
+                        except Exception as e2:
+                            logging.error(f"Reintento fallido: {str(e2)}")
+                            return False, f"Error tras reintento: {str(e2)}"
                 return False, f"Error al publicar la foto: {str(e)}"
-        else:
+        else: 
             return False, f"No se pudo autenticar con Instagram. {login_message}"
 
     except Exception as e:
@@ -193,7 +177,7 @@ def post_to_instagram(image_path, caption, username, password):
         logging.error(f"Instagram posting error: {error_msg}")
 
         if "challenge_required" in error_msg or "Unexpected token '<'" in error_msg:
-            return False, "La cuenta de Instagram requiere verificación manual. Por favor inicie sesión en Instagram desde un navegador y complete los desafíos de seguridad."
+            return False, "La cuenta de Instagram requiere verificación manual. Inicia sesión en un navegador y completa los desafíos de seguridad."
 
         return False, f"Error posting to Instagram: {error_msg}"
 
